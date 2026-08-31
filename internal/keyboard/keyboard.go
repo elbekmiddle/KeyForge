@@ -17,7 +17,7 @@ func NewListener(logger *slog.Logger) *Listener {
 	}
 }
 
-func (l *Listener) Listen(path string) error {
+func (l *Listener) Listen(path string, handler func(KeyEvent)) error {
 	l.logger.Info("opening keyboard",
 		"path", path,
 	)
@@ -44,10 +44,22 @@ func (l *Listener) Listen(path string) error {
 			return fmt.Errorf("failed to read keyboard event: %w", err)
 		}
 
+		if event.TypeName() != "EV_KEY" {
+			continue
+		}
+
+		keyEvent := KeyEvent{
+			Code:  event.CodeName(),
+			Value: EventValue(event.Value),
+		}
+
 		l.logger.Debug("keyboard event",
-			"type", event.TypeName(),
-			"code", event.CodeName(),
-			"value", event.Value,
+			"code", keyEvent.Code,
+			"value", keyEvent.Value,
 		)
+
+		if handler != nil {
+			handler(keyEvent)
+		}
 	}
 }
