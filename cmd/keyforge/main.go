@@ -2,7 +2,9 @@ package main
 
 import (
 	"log/slog"
+	"os"
 
+	"github.com/elbekmiddle/KeyForge/internal/keyboard"
 	"github.com/elbekmiddle/KeyForge/internal/linux"
 	"github.com/elbekmiddle/KeyForge/internal/logger"
 )
@@ -10,35 +12,60 @@ import (
 func main() {
 	log := logger.New()
 
+	if len(os.Args) >= 2 && os.Args[1] == "listen" {
+		listen(log)
+		return
+	}
+
+	devices(log)
+}
+
+func devices(log *slog.Logger) {
 	log.Info("⚒️ KeyForge starting")
 	log.Debug("scanning input devices")
 
-	devices, err := linux.ListInputDevices()
+	items, err := linux.ListInputDevices()
 	if err != nil {
 		log.Error("failed to scan input devices",
-			slog.Any("error", err),
+			"error", err,
 		)
 		return
 	}
 
-	if len(devices) == 0 {
+	if len(items) == 0 {
 		log.Warn("no input devices found")
 		return
 	}
 
-	for _, d := range devices {
+	for _, d := range items {
 		log.Info("device detected",
-			slog.String("name", d.Name),
-			slog.String("type", string(d.Type)),
-			slog.String("path", d.Path),
-			slog.String("bus", d.Bus),
-			slog.String("vendor_id", d.VendorID),
-			slog.String("product_id", d.ProductID),
-			slog.String("manufacturer", d.Manufacturer),
+			"name", d.Name,
+			"type", string(d.Type),
+			"path", d.Path,
+			"bus", d.Bus,
+			"vendor_id", d.VendorID,
+			"product_id", d.ProductID,
+			"manufacturer", d.Manufacturer,
 		)
 	}
 
 	log.Info("device scan completed",
-		slog.Int("count", len(devices)),
+		"count", len(items),
 	)
+}
+
+func listen(log *slog.Logger) {
+	path := "/dev/input/event6"
+
+	if len(os.Args) >= 3 {
+		path = os.Args[2]
+	}
+
+	listener := keyboard.NewListener(log)
+
+	if err := listener.Listen(path); err != nil {
+		log.Error("keyboard listener stopped",
+			"error", err,
+		)
+	}
 }
