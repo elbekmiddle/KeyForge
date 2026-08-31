@@ -1,31 +1,40 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/elbekmiddle/KeyForge/internal/linux"
+	"github.com/elbekmiddle/KeyForge/internal/logger"
 )
 
 func main() {
-	fmt.Println("⚒️ KeyForge")
-	fmt.Println("Scanning input devices...")
-	fmt.Println()
+	log := logger.New()
+
+	log.Info("⚒️ KeyForge starting")
+	log.Debug("scanning input devices")
 
 	devices, err := linux.ListInputDevices()
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(devices) == 0 {
-		fmt.Println("No input devices found.")
+		log.Error("failed to scan input devices",
+			slog.Any("error", err),
+		)
 		return
 	}
 
-	for i, d := range devices {
-		fmt.Printf("[%d] %s\n", i+1, d.Name)
-		fmt.Printf("    Type: %s\n", d.Type)
-		fmt.Printf("    Path: %s\n", d.Path)
-		fmt.Println()
+	if len(devices) == 0 {
+		log.Warn("no input devices found")
+		return
 	}
+
+	for _, d := range devices {
+		log.Info("device detected",
+			slog.String("name", d.Name),
+			slog.String("path", d.Path),
+			slog.String("type", string(d.Type)),
+		)
+	}
+
+	log.Info("device scan completed",
+		slog.Int("count", len(devices)),
+	)
 }
