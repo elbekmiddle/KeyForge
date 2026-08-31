@@ -29,8 +29,12 @@ func main() {
 	for _, d := range devices {
 		log.Info("device detected",
 			slog.String("name", d.Name),
-			slog.String("path", d.Path),
 			slog.String("type", string(d.Type)),
+			slog.String("path", d.Path),
+			slog.String("bus", d.Bus),
+			slog.String("vendor_id", d.VendorID),
+			slog.String("product_id", d.ProductID),
+			slog.String("manufacturer", d.Manufacturer),
 		)
 	}
 
