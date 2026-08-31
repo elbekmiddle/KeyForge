@@ -1,0 +1,9 @@
+{
+  "uuid": "keyforge@elbekmiddle",
+  "name": "KeyForge",
+  "description": "Exposes the focused window over D-Bus (com.elbekmiddle.KeyForge) so the KeyForge daemon can switch remapping profiles per active application.",
+  "shell-version": ["45", "46", "47"],
+  "url": "https://github.com/elbekmiddle/KeyForge",
+  "version-name": "1.0.0",
+  "version": 1
+}

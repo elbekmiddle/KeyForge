@@ -5,6 +5,9 @@ import (
 	"os"
 
 	"github.com/elbekmiddle/KeyForge/internal/activeapp"
+	"github.com/elbekmiddle/KeyForge/internal/daemon"
+	"github.com/elbekmiddle/KeyForge/internal/device"
+	"github.com/elbekmiddle/KeyForge/internal/extension"
 	"github.com/elbekmiddle/KeyForge/internal/keyboard"
 	"github.com/elbekmiddle/KeyForge/internal/linux"
 	"github.com/elbekmiddle/KeyForge/internal/logger"
@@ -17,6 +20,10 @@ func main() {
 
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
+		case "run":
+			runDaemon(log)
+			return
+
 		case "devices":
 			runDevices(log)
 			return
@@ -28,13 +35,75 @@ func main() {
 		case "active-app":
 			runActiveApp(log)
 			return
+
+		case "extension":
+			runExtension(log)
+			return
+
+		case "identity":
+			runIdentity(log)
+			return
 		}
 	}
 
 	log.Info("⚒️ KeyForge")
 	log.Info(
 		"usage",
-		"commands", "devices | listen | active-app",
+		"commands", "run | devices | listen | active-app | extension | identity",
+	)
+}
+
+// runDaemon boots the full pipeline: identity, GNOME extension, active-app
+// tracking, and keyboard remapping (doc section 21).
+func runDaemon(log *slog.Logger) {
+	path := "/dev/input/event6"
+
+	if len(os.Args) >= 3 {
+		path = os.Args[2]
+	}
+
+	if err := daemon.Run(log, path); err != nil {
+		os.Exit(1)
+	}
+}
+
+// runExtension installs/updates and enables the KeyForge GNOME extension
+// without starting the rest of the daemon — useful for debugging Phase 2/3
+// in isolation.
+func runExtension(log *slog.Logger) {
+	log.Info("ensuring gnome extension is installed and enabled")
+
+	if err := extension.EnsureInstalled(log); err != nil {
+		log.Error("failed to ensure gnome extension", "error", err)
+		return
+	}
+
+	if err := extension.Ping(); err != nil {
+		log.Warn(
+			"extension installed and enabled, but not yet reachable on d-bus (GNOME may need a reload)",
+			"error", err,
+		)
+		return
+	}
+
+	log.Info("gnome extension installed, enabled, and reachable on d-bus")
+}
+
+// runIdentity bootstraps (or loads) the local device identity and prints
+// it — useful for debugging Phase 4/6 in isolation.
+func runIdentity(log *slog.Logger) {
+	id, err := device.Bootstrap()
+	if err != nil {
+		log.Error("failed to bootstrap device identity", "error", err)
+		return
+	}
+
+	log.Info(
+		"device identity",
+		"guid", id.GUID,
+		"name", id.Device.Name,
+		"registered", id.Device.Registered,
+		"created_this_run", id.Created,
 	)
 }
 
@@ -196,7 +265,7 @@ func runListen(log *slog.Logger) {
 func runActiveApp(log *slog.Logger) {
 	log.Info("detecting active application")
 
-	detector := activeapp.NewLinuxDetector()
+	detector := activeapp.NewAutoDetector()
 
 	app, err := detector.Current()
 	if err != nil {
