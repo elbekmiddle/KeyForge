@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/elbekmiddle/KeyForge/internal/activeapp"
 	"github.com/elbekmiddle/KeyForge/internal/keyboard"
 	"github.com/elbekmiddle/KeyForge/internal/linux"
 	"github.com/elbekmiddle/KeyForge/internal/logger"
@@ -23,12 +24,17 @@ func main() {
 		case "listen":
 			runListen(log)
 			return
+
+		case "active-app":
+			runActiveApp(log)
+			return
 		}
 	}
 
 	log.Info("⚒️ KeyForge")
-	log.Info("usage",
-		"commands", "devices | listen",
+	log.Info(
+		"usage",
+		"commands", "devices | listen | active-app",
 	)
 }
 
@@ -136,6 +142,7 @@ func runListen(log *slog.Logger) {
 	err = listener.Listen(path, func(event keyboard.KeyEvent) {
 		// Lookup faqat RAM'dagi mapping table'dan foydalanadi.
 		mapped, ok := engine.Lookup(event)
+
 		if !ok {
 			return
 		}
@@ -184,4 +191,27 @@ func runListen(log *slog.Logger) {
 	}
 
 	log.Info("keyboard remapper stopped")
+}
+
+func runActiveApp(log *slog.Logger) {
+	log.Info("detecting active application")
+
+	detector := activeapp.NewLinuxDetector()
+
+	app, err := detector.Current()
+	if err != nil {
+		log.Error(
+			"failed to detect active application",
+			"error", err,
+		)
+		return
+	}
+
+	log.Info(
+		"active application detected",
+		"name", app.Name,
+		"class", app.Class,
+		"executable", app.Executable,
+		"pid", app.PID,
+	)
 }
