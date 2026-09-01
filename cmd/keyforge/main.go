@@ -54,15 +54,23 @@ func main() {
 }
 
 // runDaemon boots the full pipeline: identity, GNOME extension, active-app
-// tracking, and keyboard remapping (doc section 21).
+// tracking, profile matching, and keyboard + mouse remapping (doc section 21).
+//
+// Usage: keyforge run [keyboardPath] [mousePath]
+// Either path may be omitted to auto-detect / read from keyboard.json /
+// mouse.json.
 func runDaemon(log *slog.Logger) {
-	path := "/dev/input/event6"
+	opts := daemon.Options{}
 
 	if len(os.Args) >= 3 {
-		path = os.Args[2]
+		opts.KeyboardPath = os.Args[2]
 	}
 
-	if err := daemon.Run(log, path); err != nil {
+	if len(os.Args) >= 4 {
+		opts.MousePath = os.Args[3]
+	}
+
+	if err := daemon.Run(log, opts); err != nil {
 		os.Exit(1)
 	}
 }

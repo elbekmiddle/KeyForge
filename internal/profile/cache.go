@@ -48,6 +48,20 @@ func (c *Cache) Active() (Profile, bool) {
 	return *c.active, true
 }
 
+// All returns every cached profile, in no particular order — used by
+// Match to pick the best fit for the currently focused application.
+func (c *Cache) All() []Profile {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	all := make([]Profile, 0, len(c.profiles))
+	for _, p := range c.profiles {
+		all = append(all, p)
+	}
+
+	return all
+}
+
 func (c *Cache) ClearActive() {
 	c.mu.Lock()
 	c.active = nil

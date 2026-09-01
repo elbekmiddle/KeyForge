@@ -26,6 +26,84 @@ type DeviceInfo struct {
 	Registered bool   `json:"registered"`
 }
 
+// KeyboardConfig is keyboard.json (doc section 13): which physical
+// keyboard to listen on.
+type KeyboardConfig struct {
+	Enabled bool   `json:"enabled"`
+	Device  string `json:"device"`
+}
+
+// MouseConfig is mouse.json (doc section 14): which physical mice to
+// listen on. Multiple devices are supported since a "keyboard" and its
+// "mouse" often aren't a single USB device.
+type MouseConfig struct {
+	Enabled bool     `json:"enabled"`
+	Devices []string `json:"devices"`
+}
+
+// LoadKeyboardConfig reads keyboard.json for the given guid. A missing
+// file is not an error — it just means keyboard remapping hasn't been
+// configured yet.
+func LoadKeyboardConfig(guid string) (KeyboardConfig, error) {
+	var cfg KeyboardConfig
+
+	p, err := KeyboardJSONPath(guid)
+	if err != nil {
+		return cfg, err
+	}
+
+	if _, statErr := os.Stat(p); os.IsNotExist(statErr) {
+		return cfg, nil
+	}
+
+	if err := readJSON(p, &cfg); err != nil {
+		return cfg, err
+	}
+
+	return cfg, nil
+}
+
+// SaveKeyboardConfig writes keyboard.json for the given guid.
+func SaveKeyboardConfig(guid string, cfg KeyboardConfig) error {
+	p, err := KeyboardJSONPath(guid)
+	if err != nil {
+		return err
+	}
+
+	return writeJSON(p, cfg)
+}
+
+// LoadMouseConfig reads mouse.json for the given guid. A missing file is
+// not an error — it just means mouse remapping hasn't been configured yet.
+func LoadMouseConfig(guid string) (MouseConfig, error) {
+	var cfg MouseConfig
+
+	p, err := MouseJSONPath(guid)
+	if err != nil {
+		return cfg, err
+	}
+
+	if _, statErr := os.Stat(p); os.IsNotExist(statErr) {
+		return cfg, nil
+	}
+
+	if err := readJSON(p, &cfg); err != nil {
+		return cfg, err
+	}
+
+	return cfg, nil
+}
+
+// SaveMouseConfig writes mouse.json for the given guid.
+func SaveMouseConfig(guid string, cfg MouseConfig) error {
+	p, err := MouseJSONPath(guid)
+	if err != nil {
+		return err
+	}
+
+	return writeJSON(p, cfg)
+}
+
 // LoadMetadata reads keyforge.json for the given guid.
 func LoadMetadata(guid string) (Metadata, error) {
 	var meta Metadata

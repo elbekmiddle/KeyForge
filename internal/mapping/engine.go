@@ -23,7 +23,14 @@ func (e *Engine) SetMappings(mappings []Mapping) {
 }
 
 func (e *Engine) Lookup(event keyboard.KeyEvent) (Mapping, bool) {
-	mapping, ok := e.mappings[event.Code]
+	return e.LookupCode(event.Code)
+}
+
+// LookupCode looks up a mapping by raw evdev code name (e.g. "KEY_A",
+// "BTN_EXTRA"), independent of which device it came from — keyboard and
+// mouse both funnel through this.
+func (e *Engine) LookupCode(code string) (Mapping, bool) {
+	mapping, ok := e.mappings[code]
 
 	return mapping, ok
 }
