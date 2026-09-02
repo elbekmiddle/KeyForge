@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/elbekmiddle/KeyForge/internal/config"
 )
@@ -98,6 +99,23 @@ func EnsureDefault(guid string) (Profile, error) {
 	}
 
 	return def, nil
+}
+
+// ModTime returns the last-modified time of profiles/<id>.json — used as
+// the "updatedAt" clock for last-write-wins sync (Phase 10). Local file
+// mtime is good enough here since the daemon is the only writer.
+func ModTime(guid, id string) (time.Time, error) {
+	dir, err := config.ProfilesDir(guid)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	info, err := os.Stat(filepath.Join(dir, id+".json"))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("profile: failed to stat %s: %w", id, err)
+	}
+
+	return info.ModTime(), nil
 }
 
 func load(path string) (Profile, error) {

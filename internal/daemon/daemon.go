@@ -6,11 +6,13 @@
 //	   ├── Extension
 //	   ├── ActiveApp
 //	   ├── Profiles
+//	   ├── Sync (optional — only if `keyforge login` has run)
 //	   ├── Keyboard
 //	   └── Mouse
 //
-// Authentication, backend sync, and conflict resolution are later phases
-// (doc sections 5, 10, 27-30) and are not started here yet.
+// Conflict resolution beyond simple last-write-wins is a later phase (doc
+// sections 28-30) and is not started here — same as the doc itself defers
+// it.
 package daemon
 
 import (
@@ -25,11 +27,13 @@ import (
 	"github.com/elbekmiddle/KeyForge/internal/config"
 	"github.com/elbekmiddle/KeyForge/internal/device"
 	"github.com/elbekmiddle/KeyForge/internal/extension"
+	"github.com/elbekmiddle/KeyForge/internal/identity"
 	"github.com/elbekmiddle/KeyForge/internal/keyboard"
 	"github.com/elbekmiddle/KeyForge/internal/linux"
 	"github.com/elbekmiddle/KeyForge/internal/mapping"
 	"github.com/elbekmiddle/KeyForge/internal/mouse"
 	"github.com/elbekmiddle/KeyForge/internal/profile"
+	"github.com/elbekmiddle/KeyForge/internal/sync"
 	"github.com/elbekmiddle/KeyForge/internal/uinput"
 )
 
@@ -109,6 +113,19 @@ func Run(log *slog.Logger, opts Options) error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	// ------------------------------------------------------------
+	// Backend sync (doc section 10) — entirely optional. If nobody has
+	// run `keyforge login`, everything above still works fully offline
+	// (doc section 28: "Internet DOWN -> Local config -> Keyboard
+	// remapping" keeps working either way).
+	// ------------------------------------------------------------
+
+	if session, ok := sync.LoadSession(id.GUID); ok {
+		go runSync(ctx, log, session, id, cache, keyboardEngine, mouseEngine)
+	} else {
+		log.Debug("no backend session found, running offline (see: keyforge login)")
+	}
 
 	if extensionReady {
 		detector := activeapp.NewAutoDetector()
@@ -394,4 +411,85 @@ func firstDeviceOfType(t device.Type) (string, bool) {
 	}
 
 	return "", false
+}
+
+// runSync drives the optional backend sync loop (doc section 10):
+// register this device, push whatever's local, pull the authoritative
+// set back, then just wait on the real-time channel for "something
+// changed elsewhere" pushes instead of polling.
+func runSync(
+	ctx context.Context,
+	log *slog.Logger,
+	session sync.Session,
+	id device.Identity,
+	cache *profile.Cache,
+	keyboardEngine *mapping.Engine,
+	mouseEngine *mapping.Engine,
+) {
+	fingerprint, err := identity.Fingerprint()
+	if err != nil {
+		log.Warn("failed to compute machine fingerprint, skipping backend sync", "error", err)
+		return
+	}
+
+	client := sync.NewClient()
+
+	if err := client.RegisterDevice(session.AccessToken, id.GUID, fingerprint, id.Device.Name); err != nil {
+		log.Warn("failed to register device with backend", "error", err)
+	}
+
+	// Push whatever's on disk first (covers profiles created before the
+	// very first login/sync), then adopt whatever the server considers
+	// authoritative — including edits made from elsewhere.
+	if _, _, remote, err := client.PushProfiles(session.AccessToken, id.GUID, cache.All()); err != nil {
+		log.Warn("failed to push local profiles to backend", "error", err)
+	} else {
+		applySyncedProfiles(log, id.GUID, remote, cache, keyboardEngine, mouseEngine)
+	}
+
+	log.Info("backend sync ready, listening for changes", "backend", sync.BaseURL())
+
+	sync.Listen(ctx, log, session.AccessToken, id.GUID, func() {
+		remote, err := client.PullProfiles(session.AccessToken, id.GUID)
+		if err != nil {
+			log.Warn("failed to pull profiles after realtime update", "error", err)
+			return
+		}
+
+		applySyncedProfiles(log, id.GUID, remote, cache, keyboardEngine, mouseEngine)
+	})
+}
+
+// applySyncedProfiles writes the server's authoritative profiles to local
+// disk, refreshes the cache, and — if the currently active profile was
+// among them — reloads the mapping engines so the change takes effect
+// immediately, without waiting for the next active-app switch.
+func applySyncedProfiles(
+	log *slog.Logger,
+	guid string,
+	remote []profile.Profile,
+	cache *profile.Cache,
+	keyboardEngine *mapping.Engine,
+	mouseEngine *mapping.Engine,
+) {
+	if len(remote) == 0 {
+		return
+	}
+
+	active, hasActive := cache.Active()
+
+	for _, p := range remote {
+		if err := profile.Save(guid, p); err != nil {
+			log.Warn("failed to save synced profile locally", "profile", p.ID, "error", err)
+			continue
+		}
+
+		cache.Set(p)
+
+		if hasActive && p.ID == active.ID {
+			applyProfile(log, cache, keyboardEngine, mouseEngine, p)
+		}
+	}
+
+	log.Info("profiles synced from backend", "count", len(remote))
 }
