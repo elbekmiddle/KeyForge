@@ -24,14 +24,32 @@ import (
 
 const defaultBaseURL = "http://localhost:3000"
 
-// BaseURL returns the backend base URL: KEYFORGE_BACKEND_URL if set,
-// otherwise http://localhost:3000.
+// overrideBaseURL lets a GUI settings screen change the backend URL for
+// the running process without needing to touch the environment (which a
+// desktop app can't easily do for itself anyway). CLI usage is
+// unaffected — it only ever sets KEYFORGE_BACKEND_URL.
+var overrideBaseURL string
+
+// BaseURL returns the backend base URL: an in-process override set via
+// SetBaseURLOverride, then KEYFORGE_BACKEND_URL if set, otherwise
+// http://localhost:3000.
 func BaseURL() string {
+	if overrideBaseURL != "" {
+		return overrideBaseURL
+	}
+
 	if url := os.Getenv("KEYFORGE_BACKEND_URL"); url != "" {
 		return url
 	}
 
 	return defaultBaseURL
+}
+
+// SetBaseURLOverride sets the in-process backend URL override (see
+// BaseURL). Passing "" clears it, falling back to the environment
+// variable / default again.
+func SetBaseURLOverride(url string) {
+	overrideBaseURL = url
 }
 
 type Client struct {

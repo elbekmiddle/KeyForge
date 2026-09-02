@@ -1,15 +1,22 @@
 package logger
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"strings"
 )
 
 func New() *slog.Logger {
+	return NewWithWriter(os.Stdout)
+}
+
+// NewWithWriter is New but writing to an arbitrary destination — used by
+// the GUI to stream log lines into a widget instead of stdout.
+func NewWithWriter(w io.Writer) *slog.Logger {
 	level := parseLevel(os.Getenv("KEYFORGE_LOG"))
 
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	handler := slog.NewTextHandler(w, &slog.HandlerOptions{
 		Level:     level,
 		AddSource: false,
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {

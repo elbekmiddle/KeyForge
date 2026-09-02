@@ -1,3 +1,5 @@
+//go:build linux
+
 package uinput
 
 import (
@@ -7,15 +9,6 @@ import (
 
 	"github.com/elbekmiddle/KeyForge/internal/mouse"
 )
-
-// MouseOutput is the mouse counterpart of Output: it accepts remapped
-// button events and passed-through motion/scroll events and re-emits them
-// as a virtual mouse.
-type MouseOutput interface {
-	SendButton(event mouse.ButtonEvent) error
-	SendMotion(event mouse.MotionEvent) error
-	Close() error
-}
 
 type Mouse struct {
 	device *evdev.InputDevice

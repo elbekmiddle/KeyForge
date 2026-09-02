@@ -49,10 +49,24 @@ type Options struct {
 	MousePath    string // "" disables mouse remapping for this run
 }
 
-// Run boots the full KeyForge daemon: identity, extension, active-app
-// tracking, profile matching, and the keyboard + mouse remap pipelines.
-// It blocks until a shutdown signal (Ctrl+C / SIGTERM) is received.
+// Run boots the full KeyForge daemon and blocks until a shutdown signal
+// (Ctrl+C / SIGTERM) is received. This is what the CLI's `keyforge run`
+// uses; GUI callers that need to start/stop the daemon on demand should
+// use RunContext directly with their own cancellable context instead.
 func Run(log *slog.Logger, opts Options) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	return RunContext(ctx, log, opts)
+}
+
+// RunContext boots the full KeyForge daemon: identity, extension,
+// active-app tracking, profile matching, backend sync, and the keyboard
+// + mouse remap pipelines. It blocks until ctx is canceled — callers
+// control shutdown by canceling ctx (a GUI "Stop" button, a CLI signal
+// handler, a test timeout, etc.) rather than the daemon owning its own
+// signal handling.
+func RunContext(ctx context.Context, log *slog.Logger, opts Options) error {
 	// ------------------------------------------------------------
 	// Identity
 	// ------------------------------------------------------------
@@ -108,13 +122,6 @@ func Run(log *slog.Logger, opts Options) error {
 	applyProfile(log, cache, keyboardEngine, mouseEngine, pickDefault(profiles))
 
 	// ------------------------------------------------------------
-	// Active application watcher -> profile switch (doc section 8/23)
-	// ------------------------------------------------------------
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	// ------------------------------------------------------------
 	// Backend sync (doc section 10) — entirely optional. If nobody has
 	// run `keyforge login`, everything above still works fully offline
 	// (doc section 28: "Internet DOWN -> Local config -> Keyboard
@@ -126,6 +133,10 @@ func Run(log *slog.Logger, opts Options) error {
 	} else {
 		log.Debug("no backend session found, running offline (see: keyforge login)")
 	}
+
+	// ------------------------------------------------------------
+	// Active application watcher -> profile switch (doc section 8/23)
+	// ------------------------------------------------------------
 
 	if extensionReady {
 		detector := activeapp.NewAutoDetector()
